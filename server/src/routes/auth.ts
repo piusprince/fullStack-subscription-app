@@ -1,5 +1,7 @@
 import express from "express";
 import { body, validationResult } from "express-validator";
+import bcrypt from "bcryptjs";
+import JWT from "jsonwebtoken";
 import User from "../models/user";
 
 const router = express.Router();
@@ -14,13 +16,14 @@ router.post(
     const validationErrors = validationResult(req);
 
     if (!validationErrors.isEmpty()) {
-      const errors = validationErrors.array().map((error) => error.msg);
-      return res.json({ errors, data: null });
+      const errors = validationErrors.array().map((error) => {
+        return {
+          msg: error.msg,
+        };
+      });
     }
 
     const { email, password } = req.body;
-
-    await User.create({ email, password });
 
     const user = await User.findOne({ email });
 
@@ -35,7 +38,26 @@ router.post(
       });
     }
 
-    res.json(user);
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const newUser = await User.create({ email, password: hashedPassword });
+
+    const token = JWT.sign(
+      { email: newUser.email },
+      process.env.JWT_SECRET as string,
+      { expiresIn: 36000 }
+    );
+
+    res.json({
+      errors: [],
+      data: {
+        token,
+        user: {
+          email: newUser.email,
+          id: newUser.id,
+        },
+      },
+    });
   }
 );
 
